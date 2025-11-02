@@ -430,14 +430,22 @@ from telegram_utils import openai_speech_to_text
 
 logger = logging.getLogger(__name__)
 
+# Lazy initialization - clients will be created on first use
+_openai_client: OpenAI | None = None
+_assistant_manager: AssistantManger | None = None
 
-try: 
-    openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
-    assistant_manager = AssistantManger(client=openai_client)
-    logger.info("OpenAI client and assistant manager are initialized.")
-except Exception as e: 
-    assistant_manager = None
-    logger.critical(f"Failed to initialize the assistant manager: {e}", exc_info=True)
+def _get_assistant_manager() -> AssistantManger | None:
+    """Get or initialize the assistant manager lazily."""
+    global _openai_client, _assistant_manager
+    if _assistant_manager is None:
+        try:
+            _openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            _assistant_manager = AssistantManger(client=_openai_client)
+            logger.info("OpenAI client and assistant manager are initialized.")
+        except Exception as e:
+            logger.critical(f"Failed to initialize the assistant manager: {e}", exc_info=True)
+            return None
+    return _assistant_manager
 
 
 CACHE_MAX_SIZE = 2000
@@ -485,6 +493,11 @@ async def _get_or_create_thread_id_for_user(user_id: int, current_thread_id: str
         logger.info(f"Found existing thread_id for user {user_id}: {current_thread_id}")
         return current_thread_id
     
+    assistant_manager = _get_assistant_manager()
+    if not assistant_manager:
+        logger.error("AssistantManager is not available. Cannot create thread.")
+        return None
+    
     logger.info(f"No thread_id found for user {user_id}. Creating a new one.")
     new_thread = assistant_manager.threads.create_thread()
 
@@ -501,6 +514,7 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
     message_text = update.message.text
     logger.info(f"Received message from user {user.id} ({user.first_name}): '{message_text[:50]}...'")
     
+    assistant_manager = _get_assistant_manager()
     if not assistant_manager:
         logger.error("AssistantManager is not available. Cannot process message.")
         await update.message.reply_text(telegram_user_messages.GENERAL_ERROR_MESSAGE)
@@ -557,6 +571,7 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
     # logger.info(f"Received voice message from user {user.id} ({user.first_name})")
     logger.info(f"Received voice message from user {user.id} ({user.first_name})")
 
+    assistant_manager = _get_assistant_manager()
     if not assistant_manager:
         logger.error("AssistantManager is not available. Cannot process message.")
         await update.message.reply_text(telegram_user_messages.GENERAL_ERROR_MESSAGE)
@@ -565,6 +580,8 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
     user_lock = _get_user_lock(user.id)
     async with user_lock:
         try:
+            # Capture assistant_manager for use in inner function
+            manager = assistant_manager
             async def full_voice_process():
                 voice_file = await context.bot.get_file(update.message.voice.file_id)
                 file_url = voice_file.file_path
@@ -598,7 +615,7 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
                     return None, None, None, None
 
                 response_text, input_tokens, output_tokens = await asyncio.to_thread(
-                    assistant_manager.get_response,
+                    manager.get_response,
                     thread_id,
                     transcribed_text
                 )

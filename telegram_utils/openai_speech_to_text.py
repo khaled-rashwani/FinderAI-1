@@ -5,17 +5,24 @@ from typing import BinaryIO
 
 logger = logging.getLogger(__name__)
 
-try:
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-    logger.info("AsyncOpenAI client for speech services initialized successfully.")
+# Lazy initialization - client will be created on first use
+_client: AsyncOpenAI | None = None
 
-except Exception as e:
-    client = None
-    logger.error(f"Failed to initialize AsyncOpenAI client : {e}", exc_info=True)
+def _get_client() -> AsyncOpenAI | None:
+    """Get or initialize the AsyncOpenAI client lazily."""
+    global _client
+    if _client is None:
+        try:
+            _client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+            logger.info("AsyncOpenAI client for speech services initialized successfully.")
+        except Exception as e:
+            logger.error(f"Failed to initialize AsyncOpenAI client: {e}", exc_info=True)
+            return None
+    return _client
 
 
 async def speech_to_text_from_file_obj(audio_file: BinaryIO) -> str | None:
-
+    client = _get_client()
     if not client:
         logger.error("OpenAI client is not available. Cannot transcribe audio.")
         return None

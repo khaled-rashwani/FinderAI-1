@@ -1,29 +1,11 @@
-# Build tools (required for building packages from source)
-setuptools>=68.0.0
-wheel>=0.40.0
-
-# Core dependencies
-python-telegram-bot==20.7
-supabase==2.3.4
-python-dotenv==1.0.0
-
-# OpenAI integration
-openai==2.6.1
-
-# LangChain and LangGraph
-
-# Audio processing
+python-telegram-bot==21.1.1 
+supabase==2.5.0
+python-dotenv==1.0.1
+requests==2.32.3
+openai==1.35.3
+arabic-reshaper==3.0.0
+python-bidi==0.4.2
+aiohttp==3.9.5
+cachetools == 6.2.0
 soundfile==0.12.1
 numpy>=1.26.0
-
-# HTTP requests
-requests==2.31.0
-
-# Caching
-cachetools==5.3.2
-
-# Web server for health checks
-aiohttp==3.9.1
-
-# Type hints (if using older Python versions)
-typing-extensions==4.8.0
